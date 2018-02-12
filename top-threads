@@ -27,7 +27,7 @@ number_of_lines=3
 function help {
     echo ""
     echo "Usage: "
-    echo "top-threads -p <pid> [-n <number_of_threads>] [-s] [-o <output_directory>] [-t] [-l <number_of_lines>]"
+    echo "top-threads -p <pid> [-n <number_of_threads>] [-s] [-o <output_directory>] [-t] [-l <number_of_lines>] [-h]"
     echo ""
     echo "-p: The Java Process ID"
     echo "-n: Number of top threads to display. Default: $number_of_threads."
@@ -35,12 +35,17 @@ function help {
     echo "-o: Output directory to save results. Works with -s option. A temp directory is used by default."
     echo "-t: Print stack traces."
     echo "-l: Number of lines to print in stack traces. Works with -t option. Default: $number_of_lines."
+    echo "-h: Display this help."
     echo ""
 }
 
-while getopts "n:p:so:tl:" opts
+while getopts "hn:p:so:tl:" opts
 do
   case $opts in
+    h)
+        help
+        exit 0
+        ;;
     n)
         number_of_threads=${OPTARG}
         ;;
