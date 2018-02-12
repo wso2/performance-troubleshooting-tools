@@ -100,7 +100,9 @@ function process_line() {
     # Convert TID to hexadecimal
     nid=$(printf '%x' $tid)
     # Get thread dump lines for a specific NID to an array
-    readarray -t thread_dump_lines < <(grep -A 20 nid=0x$nid <(echo "$jstack_output"))
+    # Use while loop to read lines into an array
+    declare -a thread_dump_lines
+    while IFS= read -r line; do thread_dump_lines+=("$line"); done < <(grep -A 20 nid=0x$nid <(echo "$jstack_output"))
     # Get thread name and NID from the first line
     IFS=, read -a thread_details <<<"$(echo "${thread_dump_lines[0]}" | sed -E 's/"(.+)".*nid=(0x[[:xdigit:]]+).*/"\1",\2/')"
     # Get thread status from the second line
