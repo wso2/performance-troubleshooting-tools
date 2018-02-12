@@ -1,0 +1,165 @@
+#!/bin/bash
+# Copyright 2018 M. Isuru Tharanga Chrishantha Perera
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# ----------------------------------------------------------------------------
+# See top CPU consuming Java threads
+# ----------------------------------------------------------------------------
+
+pid=""
+number_of_threads=10
+save_output=false
+output_directory=""
+print_stack_traces=false
+number_of_lines=3
+
+function help {
+    echo ""
+    echo "Usage: "
+    echo "top-threads -p <pid> [-n <number_of_threads>] [-s] [-o <output_directory>] [-t] [-l <number_of_lines>]"
+    echo ""
+    echo "-p: The Java Process ID"
+    echo "-n: Number of top threads to display. Default: $number_of_threads."
+    echo "-s: Save thread dump and PS output"
+    echo "-o: Output directory to save results. Works with -s option. A temp directory is used by default."
+    echo "-t: Print stack traces."
+    echo "-l: Number of lines to print in stack traces. Works with -t option. Default: $number_of_lines."
+    echo ""
+}
+
+while getopts "n:p:so:tl:" opts
+do
+  case $opts in
+    n)
+        number_of_threads=${OPTARG}
+        ;;
+    p)
+        pid=${OPTARG}
+        ;;
+    s)
+        save_output=true
+        ;;
+    o)
+        output_directory=${OPTARG}
+        ;;
+    t)
+        print_stack_traces=true
+        ;;
+    l)
+        number_of_lines=${OPTARG}
+        ;;
+    \?)
+        help
+        exit 1
+        ;;
+  esac
+done
+
+if [[ -z $pid ]]; then
+    echo "Please specify the Java Process ID"
+    exit 1
+fi
+
+if ! kill -0 $pid > /dev/null 2>&1; then
+    echo "Please make sure the process exists" >&2
+    exit 1
+fi
+
+function print_line() {
+    printf "%-35s %-5s %-5s %-15s %-5s %-5s %-15s %-6s %-6s\n" "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9"
+}
+
+function print_header() {
+    #Print Header. The "ps" command headers are omitted due to manual sort
+    print_line "Name" "%CPU" "%MEM" "Thread Status" "State" "Nice" "CPU Time" "LWP" "NID"
+}
+
+function process_line() {
+    # Read comma separated values to an array
+    IFS=, read -a ps_values <<<"$1"
+    tid=${ps_values[5]}
+    if [[ $pid = $tid ]]; then
+        return 0
+    fi
+    # Convert TID to hexadecimal
+    nid=$(printf '%x' $tid)
+    # Get thread dump lines for a specific NID to an array
+    readarray -t thread_dump_lines < <(grep -A 20 nid=0x$nid <(echo "$jstack_output"))
+    # Get thread name and NID from the first line
+    IFS=, read -a thread_details <<<"$(echo "${thread_dump_lines[0]}" | sed -E 's/"(.+)".*nid=(0x[[:xdigit:]]+).*/"\1",\2/')"
+    # Get thread status from the second line
+    thread_status=$(echo "${thread_dump_lines[1]}" | sed -E 's/.*java.lang.Thread.State:[[:space:]]+([[:upper:]_]+).*/\1/')
+
+    # Print values
+    print_line "${thread_details[0]}" "${ps_values[0]}" "${ps_values[1]}" "$thread_status" \
+        "${ps_values[2]}" "${ps_values[3]}" "${ps_values[4]}" "${ps_values[5]}" "${thread_details[1]}"
+    if [[ $print_stack_traces = true ]]; then
+        max_index=${#thread_dump_lines[@]}
+        # Stack trace starts from 3rd line, but show first two lines as well
+        line_index=0
+        # Use let for arithmetic expressions
+        let limit=$number_of_lines+2
+        while [[ $line_index -lt $limit && $line_index -lt $max_index ]]; do
+            line="${thread_dump_lines[$line_index]}" 
+            if [[ -z "${line// }" ]]; then
+                break
+            else
+                echo "$line"
+            fi
+            let line_index=line_index+1
+        done
+        echo -ne "\n"
+    fi
+}
+
+#Get ps output first
+#Sort manually. ps --sort works only on processes, not on threads.
+ps_output=$(ps --no-headers -p $pid -T -o "%cpu:1,%mem:1,state:1,nice:1,cputime:1,lwp:1,pid:1" | sort -nr)
+
+#Get only specified number of threads and replace spaces with comma
+ps_output=$(echo "$ps_output" | head -$number_of_threads | sed -E 's/[[:space:]]+/,/g')
+
+#Get thread dump
+jstack_output=$(jstack $pid)
+
+top_threads_output=$(
+print_header
+echo "$ps_output" | while read line; do process_line "$line"; done
+)
+
+#Print top threads
+echo "$top_threads_output"
+
+function print_save_message() {
+    printf "%-18s %-50s\n" "$1 saved:" "$2"
+}
+
+if [[ $save_output = true ]]; then
+    prefix=$(date +%s%3N)
+    if [[ -z $output_directory ]]; then
+        # Use temp directory
+        output_directory=$(mktemp -d /tmp/top-threads.XXXXXX)
+    elif [[ ! -d $output_directory ]]; then
+        mkdir $output_directory
+    fi
+    ps_output_file=$output_directory/$prefix-ps.txt
+    thread_dump_file=$output_directory/$prefix-thread-dump.txt
+    top_threads_output_file=$output_directory/$prefix-top-threads.txt
+    echo "$ps_output" > $ps_output_file
+    print_save_message "PS output" $ps_output_file
+    echo "$jstack_output" > $thread_dump_file
+    print_save_message "Thread dump" $thread_dump_file
+    echo "$top_threads_output" > $top_threads_output_file
+    print_save_message "Top threads" $top_threads_output_file
+fi
