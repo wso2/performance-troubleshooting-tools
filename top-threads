@@ -132,10 +132,10 @@ function process_line() {
 
 #Get ps output first
 #Sort manually. ps --sort works only on processes, not on threads.
-ps_output=$(ps --no-headers -p $pid -T -o "%cpu:1,%mem:1,state:1,nice:1,cputime:1,lwp:1,pid:1" | sort -nr)
+ps_output=$(ps -p $pid -T -o "%cpu=,%mem=,state=,nice=,cputime=,lwp=,pid=" | sort -nr)
 
 #Get only specified number of threads and replace spaces with comma
-ps_output=$(echo "$ps_output" | head -$number_of_threads | sed -E 's/[[:space:]]+/,/g')
+ps_output=$(echo "$ps_output" | head -$number_of_threads | sed -E -e 's/^[[:space:]]*//' -e 's/[[:space:]]+/,/g')
 
 #Get thread dump
 jstack_output=$(jstack $pid)
