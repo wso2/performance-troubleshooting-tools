@@ -1,0 +1,113 @@
+#!/bin/bash
+# Copyright 2018 M. Isuru Tharanga Chrishantha Perera
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# ----------------------------------------------------------------------------
+# Profile Java Applications using jstack command
+# ----------------------------------------------------------------------------
+
+pid=""
+number_of_samples=150
+sample_interval=2s
+output_directory=""
+save_ps_output=true
+
+function help {
+    echo ""
+    echo "Usage: "
+    echo "jstack-profiler -p <pid> [-n <number_of_samples>] [-i <sample_interval[suffix]>] [-o <output_directory>] [-x]"
+    echo ""
+    echo "-p: The Java Process ID"
+    echo "-n: Number of samples to take. Default: $number_of_samples"
+    echo "-i: Sample interval. Default: $sample_interval. Floating point numbers are accepted"
+    echo "    Suffix may be: "
+    echo "    s - seconds (the default)"
+    echo "    m - minutes"
+    echo "    h - hours"
+    echo "    d - days"
+    echo "-o: Output directory to save results"
+    echo "-x: Do not save 'ps' command output"
+    echo "-h: Display this help"
+    echo ""
+}
+
+while getopts "hp:n:i:o:" opts
+do
+  case $opts in
+    h)
+        help
+        exit 0
+        ;;
+    p)
+        pid=${OPTARG}
+        ;;
+    n)
+        number_of_samples=${OPTARG}
+        ;;
+    i)
+        sample_interval=${OPTARG}
+        ;;
+    o)
+        output_directory=${OPTARG}
+        ;;
+    x)
+        save_ps_output=false
+        ;;
+    \?)
+        help
+        exit 1
+        ;;
+  esac
+done
+
+if [[ -z $pid ]]; then
+    echo "Please specify the Java Process ID"
+    exit 1
+fi
+
+if ! kill -0 $pid > /dev/null 2>&1; then
+    echo "Please make sure the process exists" >&2
+    exit 1
+fi
+
+if [[ -z $output_directory ]]; then
+    # Use temp directory
+    output_directory=$(mktemp -d /tmp/jstack-profiler.XXXXXX)
+elif [[ ! -d $output_directory ]]; then
+    mkdir $output_directory
+fi
+
+echo "The jstack samples will be saved in $output_directory"
+counter=0
+while [[ $counter -lt $number_of_samples ]]; do
+    prefix=$(date +%s%3N)
+    ps_output_file=$output_directory/$prefix-ps.txt
+    thread_dump_file=$output_directory/$prefix-thread-dump.txt
+    if [[ $save_ps_output = true ]]; then
+        # Make sure following command is the same 'ps' command used in 'top-threads' script
+        ps -p $pid -T -o "%cpu=,%mem=,state=,nice=,cputime=,lwp=,pid=" | sort -nr | \
+            sed -E -e 's/^[[:space:]]*//' -e 's/[[:space:]]+/,/g' > $ps_output_file
+    fi
+    # Get thread dump
+    jstack ${JSTACK_OPTS} $pid > $thread_dump_file
+    let counter+=1
+    let progress=$counter*100/$number_of_samples*100/100;
+    echo -ne "\rProgress: $progress%"
+    if [[ $counter -lt $number_of_samples ]]; then
+        sleep $sample_interval
+    fi
+done
+# Clear progress line
+echo -ne "\rCompleted.      \n"
+}
