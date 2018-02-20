@@ -1,0 +1,251 @@
+#!/bin/bash
+# Copyright 2018 M. Isuru Tharanga Chrishantha Perera
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# ----------------------------------------------------------------------------
+# Analyze jstack samples taken from jstack-profiler script
+# ----------------------------------------------------------------------------
+# This script by default shows the stack samples count by thread status
+# There is an option to show CPU Usage per thread
+
+samples_directory=""
+number_of_stack_trace_samples=5
+number_of_stack_trace_lines=20
+show_cpu_usage_report=false
+show_stack_trace_samples=false
+stack_trace_column_width=80
+
+function help {
+    echo ""
+    echo "Usage: "
+    echo "analyze-jstack-samples -d <samples_directory> [-s <number_of_stack_trace_samples>] [-l <number_of_stack_trace_lines>]" \
+         "[[-u] [-t]] [-w <stack_trace_column_width>] [-h]"
+    echo ""
+    echo "-d: The directory containing jstack samples"
+    echo "-s: Number of stack trace samples to show. Default: $number_of_stack_trace_samples"
+    echo "-l: Number of stack trace lines to show. Default: $number_of_stack_trace_lines"
+    echo "-u: Show CPU usage report instead of stack sample count"
+    echo "-t: Show stack trace samples. Works with -u option"
+    echo "-w: Width of stack trace column. Default $stack_trace_column_width"
+    echo "-h: Display this help"
+    echo ""
+}
+
+while getopts "hd:s:l:utw:" opts
+do
+  case $opts in
+    h)
+        help
+        exit 0
+        ;;
+    d)
+        samples_directory=${OPTARG}
+        ;;
+    s)
+        number_of_stack_trace_samples=${OPTARG}
+        ;;
+    l)
+        number_of_stack_trace_lines=${OPTARG}
+        ;;
+    u)
+        show_cpu_usage_report=true
+        ;;
+    t)
+        show_stack_trace_samples=true
+        ;;
+    w)
+        stack_trace_column_width=${OPTARG}
+        ;;
+    \?)
+        help
+        exit 1
+        ;;
+  esac
+done
+
+if [[ ! -d $samples_directory ]]; then
+    echo "Please specify the samples directory"
+    exit 1
+fi
+
+# Change directory to the directory with thread samples
+cd $samples_directory
+
+function print_cpu_report_header() {
+    printf "%8s  %s\n" "Avg %CPU" "Thread Name"
+}
+
+function print_cpu_report_values() {
+    printf "%8s  %s\n" $(printf "%0.2f" "$1") "$2"
+}
+
+function print_cpu_report_stack_sample_header() {
+    printf "%8s  %-10s  %s\n" "$1" "$2" "$3"
+}
+
+function print_cpu_report_stack_sample_values() {
+    declare -a stack_lines=()
+    while IFS= read -r line; do stack_lines+=("$line"); done < <(echo "$3" | fold -w $stack_trace_column_width)
+    printf "%8s  %-10s  %s\n" "$1" "$2" "${stack_lines[0]}"
+    count=1
+    while [[ $count -lt ${#stack_lines[@]} ]]; do
+        printf "%20s  %s\n" "" "${stack_lines[count]}"
+        let count+=1
+    done
+}
+
+function analyze() {
+    if [[ $show_cpu_usage_report = true ]]; then
+        #CPU usage by NID
+        declare -A cpu_usage_summary
+        #Thread name by NID
+        declare -A thread_names
+        #Stack Traces by NID
+        declare -A stack_traces
+        # Go through all ps output files
+        for filename in *-ps.txt; do
+            # Corresponding thread dump file of ps output file
+            thread_dump_file=$(echo $filename | sed 's/ps/thread-dump/')
+            # Read the ps output file
+            while read line; do
+                # Read csv to an array
+                IFS=, read -a ps_values <<<"$line"
+                # First column is the CPU usage
+                cpu_usage="${ps_values[0]}"
+                # Sixth column is the Thread ID (LWP)
+                tid="${ps_values[5]}"
+                # Convert TID to hexadecimal
+                nid=$(printf '%x' $tid)
+                # Find the thread name by nid
+                thread_name="${thread_names[$nid]}"
+                declare -a thread_dump_lines=()
+                # To show stack trace samples, each thread dump file should be processed.
+                # Otherwise, a single thread dump should be enough to get the thread name,
+                # assuming thread names won't change
+                if [[ -z "$thread_name" || $show_stack_trace_samples = true ]]; then
+                    # Read multiple lines after grep match and store lines in an array
+                    let thread_dump_line_count=$number_of_stack_trace_lines+3
+                    while IFS= read -r thread_dump_line; do
+                        thread_dump_lines+=("$thread_dump_line")
+                    done < <(grep -A $thread_dump_line_count nid=0x$nid $thread_dump_file)
+                    # Extract thread name from the first line
+                    local thread_details_line="${thread_dump_lines[0]}"
+                    if [[ ! -z "$thread_details_line" ]]; then
+                        thread_name=$(echo "$thread_details_line" | sed -E 's/"(.+)".*/"\1"/')
+                    fi
+                fi
+                # Continue if the thread name already found in cache or in the thread dump
+                if [[ ! -z "$thread_name" ]]; then
+                    # Save thread name
+                    thread_names[$nid]="$thread_name"
+                    # Get previously saved cpu usage
+                    average_cpu_usage="${cpu_usage_summary[$nid]}"
+                    if [[ ! -z $average_cpu_usage ]]; then
+                        # Use bc to calculate average of CPU usages, which are floating point numbers
+                        cpu_usage_summary[$nid]=$(echo "scale=2;($average_cpu_usage+$cpu_usage)/2" | bc -l)
+                    else
+                        # Save cpu usage
+                        cpu_usage_summary[$nid]="$cpu_usage"
+                    fi
+
+                    if [[ $show_stack_trace_samples = false ]]; then
+                        # continue if there is no need to show the stack trace samples
+                        continue
+                    fi
+
+                    # Extract thread status from the second line
+                    thread_status=$(echo "${thread_dump_lines[1]}" | sed -E 's/.*java.lang.Thread.State:[[:space:]]+([[:upper:]_]+).*/\1/')
+                    if [[ -z "$thread_status" ]]; then
+                        # Do not continue without the thread status
+                        continue
+                    fi
+
+                    # Get previously saved stack trace line
+                    stack_trace="${stack_traces[$nid]}"
+                    if [[ ! -z $stack_trace ]]; then
+                        # Append new line if there is a previous stack trace line
+                        stack_trace+="\n"
+                    fi
+
+                    # Thread status should in the beginning of the line
+                    stack_trace+="$thread_status"
+
+                    max_index=${#thread_dump_lines[@]}
+                    # Start from the third line in thread dump lines
+                    line_index=2
+                    let limit=$number_of_stack_trace_lines+2
+                    count=0
+                    while [[ $line_index -lt $limit && $line_index -lt $max_index ]]; do
+                        thread_dump_line="${thread_dump_lines[$line_index]}"
+                        if [[ -z "${thread_dump_line// }" ]]; then
+                            # Do not continue if the line is empty
+                            break
+                        fi
+                        local stack_line=$(echo "$thread_dump_line" | sed -nE 's/.*at[[:space:]]+(.*)/\1/p')
+                        if [[ ! -z "$stack_line" ]]; then
+                            let count+=1
+                            if [[ $count -gt 1 ]]; then
+                                stack_trace+=';'$stack_line
+                            else
+                                stack_trace+=' '$stack_line
+                            fi
+                        fi
+                        let line_index=line_index+1
+                    done
+                    if [[ $count -gt 0 && ! -z "$stack_trace" ]]; then
+                        stack_traces[$nid]="$stack_trace"
+                    fi
+                fi
+            done <<< "$(cat $filename)"
+        done
+
+        # Sort native thread ids by cpu usage in descending order
+        sorted_nids=($(
+            for nid in "${!cpu_usage_summary[@]}"; do
+              printf '%s:%0.2f\n' "$nid" "${cpu_usage_summary[$nid]}"
+            done | sort -r -t : -k 2rn | sed 's/:.*//'))
+
+        # Print header only once if stack trace samples are not shown
+        [[ $show_stack_trace_samples = false ]] && print_cpu_report_header
+
+        for nid in "${sorted_nids[@]}"; do
+            # Repeat header with stack trace samples
+            [[ $show_stack_trace_samples = true ]] && print_cpu_report_header
+            print_cpu_report_values "${cpu_usage_summary[$nid]}" "${thread_names[$nid]}"
+            if [[ $show_stack_trace_samples = false ]]; then
+                continue
+            fi
+            count=0
+            while read line; do
+                if [[ -z "$line" ]]; then
+                    continue
+                fi
+                if [[ $count -eq 0 ]]; then
+                    echo -ne "\n"
+                    print_cpu_report_stack_sample_header "Samples" "Status" "Stack Trace"
+                fi
+                let count+=1
+                # Replace first 2 spaces with | in the line and convert to an array with 3 elements to be used with print function
+                IFS='|' read -r -a values <<< $(echo "$line" | sed -nE 's/^[[:space:]]*([[:digit:]]+)[[:space:]]+([[:upper:]_]+)[[:space:]]+(.*)$/\1|\2|\3/p')
+                print_cpu_report_stack_sample_values "${values[@]}"
+            done <<< "$(echo -ne "${stack_traces[$nid]}" | sort | uniq -c | sort -nr | head -n $number_of_stack_trace_samples)"
+            if [[ $count -gt 0 ]]; then
+                # Print new lines to separate next thread
+                echo -ne "\n\n"
+            fi
+        done
+    fi
+}
+
+analyze
