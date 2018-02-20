@@ -16,7 +16,7 @@
 # ----------------------------------------------------------------------------
 # Analyze jstack samples taken from jstack-profiler script
 # ----------------------------------------------------------------------------
-# This script by default shows the stack samples count by thread status
+# This script by default shows the stack samples count by thread state
 # There is an option to show CPU Usage per thread
 
 samples_directory=""
@@ -164,10 +164,10 @@ function analyze() {
                         continue
                     fi
 
-                    # Extract thread status from the second line
-                    thread_status=$(echo "${thread_dump_lines[1]}" | sed -E 's/.*java.lang.Thread.State:[[:space:]]+([[:upper:]_]+).*/\1/')
-                    if [[ -z "$thread_status" ]]; then
-                        # Do not continue without the thread status
+                    # Extract thread state from the second line
+                    thread_state=$(echo "${thread_dump_lines[1]}" | sed -E 's/.*java.lang.Thread.State:[[:space:]]+([[:upper:]_]+).*/\1/')
+                    if [[ -z "$thread_state" ]]; then
+                        # Do not continue without the thread state
                         continue
                     fi
 
@@ -178,8 +178,8 @@ function analyze() {
                         stack_trace+="\n"
                     fi
 
-                    # Thread status should in the beginning of the line
-                    stack_trace+="$thread_status"
+                    # Thread state should in the beginning of the line
+                    stack_trace+="$thread_state"
 
                     max_index=${#thread_dump_lines[@]}
                     # Start from the third line in thread dump lines
@@ -207,7 +207,7 @@ function analyze() {
                         stack_traces[$nid]="$stack_trace"
                     fi
                 fi
-            done <<< "$(cat $filename)"
+            done < "$filename"
         done
 
         # Sort native thread ids by cpu usage in descending order
@@ -233,7 +233,7 @@ function analyze() {
                 fi
                 if [[ $count -eq 0 ]]; then
                     echo -ne "\n"
-                    print_cpu_report_stack_sample_header "Samples" "Status" "Stack Trace"
+                    print_cpu_report_stack_sample_header "Samples" "State" "Stack Trace"
                 fi
                 let count+=1
                 # Replace first 2 spaces with | in the line and convert to an array with 3 elements to be used with print function
