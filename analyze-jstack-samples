@@ -130,6 +130,19 @@ function print_stack_report_stack_sample_values() {
     done
 }
 
+# Spinner
+sp="/-\|"
+sc=0
+
+spin() {
+   printf "\rAnalyzing ${sp:sc++:1}" >&2
+   ((sc==${#sp})) && sc=0
+}
+
+endspin() {
+   printf "\rAnalysis completed.\n" >&2
+}
+
 function analyze() {
     if [[ $show_cpu_usage_report = true ]]; then
         #CPU usage by NID
@@ -140,6 +153,8 @@ function analyze() {
         declare -A stack_traces
         # Go through all ps output files
         for filename in *-ps.txt; do
+            #Start spinning
+            spin
             # Corresponding thread dump file of ps output file
             thread_dump_file=$(echo $filename | sed 's/ps/thread-dump/')
             # Read the ps output file
@@ -235,6 +250,9 @@ function analyze() {
             done < "$filename"
         done
 
+        #end spin
+        endspin
+
         # Sort native thread ids by cpu usage in descending order
         sorted_nids=($(
             for nid in "${!cpu_usage_summary[@]}"; do
@@ -284,6 +302,8 @@ function analyze() {
         local count=0
 
         for filename in *-thread-dump.txt; do
+            #Start spinning
+            spin
             # Read the thread dump file
             while read line; do
                 # Look for thread state first
@@ -325,6 +345,9 @@ function analyze() {
                 fi
             done < "$filename"
         done
+
+        #end spin
+        endspin
 
         # All Java Thread States. https://docs.oracle.com/javase/8/docs/api/
         thread_states=("NEW" "RUNNABLE" "BLOCKED" "WAITING" "TIMED_WAITING" "TERMINATED")
