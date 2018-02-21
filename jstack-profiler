@@ -100,7 +100,10 @@ while [[ $counter -lt $number_of_samples ]]; do
             sed -E -e 's/^[[:space:]]*//' -e 's/[[:space:]]+/,/g' > $ps_output_file
     fi
     # Get thread dump
-    jstack ${JSTACK_OPTS} $pid > $thread_dump_file
+    if ! jstack ${JSTACK_OPTS} $pid > $thread_dump_file; then
+        echo "An error was encountered when getting a thread dump of process $pid."
+        break
+    fi
     let counter+=1
     let progress=$counter*100/$number_of_samples*100/100;
     echo -ne "\rProgress: $progress%"
@@ -110,4 +113,3 @@ while [[ $counter -lt $number_of_samples ]]; do
 done
 # Clear progress line
 echo -ne "\rCompleted.      \n"
-}
