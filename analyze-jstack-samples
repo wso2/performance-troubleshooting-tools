@@ -297,6 +297,8 @@ function analyze() {
         declare -A stack_traces_count_by_state
         # Total number of stack trace samples
         local total_count
+        # Thread dump file names
+        declare -a thread_dumps_with_deadlock
 
         # Temp variables in the loop
         local current_thread_state
@@ -329,9 +331,14 @@ function analyze() {
                     fi
                     continue
                 fi
+                local deadlocks=$(echo "$line" | sed -nE 's/Found[[:space:]]+([[:digit:]]+)[[:space:]]+deadlock.*/\1/p')
+                if [[ ! -z $deadlocks ]]; then
+                    thread_dumps_with_deadlock+=("$filename")
+                    continue
+                fi
                 # Save stack trace when the line is blank
                 if [[ -z $line ]]; then
-                    if [[ ! -z $stack_trace ]]; then
+                    if [[ ! -z $stack_trace && ! -z $current_thread_state ]]; then
                         stack_traces="${stack_traces_by_state[$current_thread_state]}"
                         if [[ ! -z $stack_traces ]]; then
                             stack_traces+="\n"
@@ -396,6 +403,8 @@ function analyze() {
                 echo -ne "\n\n"
             fi
         done
+
+        echo "WARN: Found deadlock(s) in ${#thread_dumps_with_deadlock[@]} thread dump(s). Refer thread dump: $PWD/${thread_dumps_with_deadlock[-1]}"
     fi
 }
 

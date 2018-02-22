@@ -35,3 +35,5 @@ There are two reports.
 
 1. Stack Samples Count by Thread State (Default report)
 2. Average CPU Usage of Threads (using both thread dump and `ps` output)
+
+The first report also supports detecting Java level deadlocks.
