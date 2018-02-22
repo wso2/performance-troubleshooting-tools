@@ -93,16 +93,16 @@ function print_cpu_report_values() {
 }
 
 function print_cpu_report_stack_sample_header() {
-    printf "%8s  %-10s  %s\n" "Samples" "State" "Stack Trace"
+    printf "%8s  %10s  %-10s  %s\n" "Samples" "Percentage" "State" "Stack Trace"
 }
 
 function print_cpu_report_stack_sample_values() {
     declare -a stack_lines=()
-    while IFS= read -r line; do stack_lines+=("$line"); done < <(echo "$3" | fold -w $stack_trace_column_width)
-    printf "%8s  %-10s  %s\n" "$1" "$2" "${stack_lines[0]}"
+    while IFS= read -r line; do stack_lines+=("$line"); done < <(echo "$4" | fold -w $stack_trace_column_width)
+    printf "%8s  %10s  %-10s  %s\n" "$1" $(printf "%0.2f%%" "$2") "$3" "${stack_lines[0]}"
     count=1
     while [[ $count -lt ${#stack_lines[@]} ]]; do
-        printf "%20s  %s\n" "" "${stack_lines[count]}"
+        printf "%32s  %s\n" "" "${stack_lines[count]}"
         let count+=1
     done
 }
@@ -270,6 +270,7 @@ function analyze() {
                 continue
             fi
             count=0
+            total_stack_traces=$(echo -ne "${stack_traces[$nid]}" | wc -l)
             while read line; do
                 if [[ -z "$line" ]]; then
                     continue
@@ -281,7 +282,8 @@ function analyze() {
                 let count+=1
                 # Replace first 2 spaces with | in the line and convert to an array with 3 elements to be used with print function
                 IFS='|' read -r -a values <<< $(echo "$line" | sed -nE 's/^[[:space:]]*([[:digit:]]+)[[:space:]]+([[:upper:]_]+)[[:space:]]+(.*)$/\1|\2|\3/p')
-                print_cpu_report_stack_sample_values "${values[@]}"
+                percentage=$(echo "scale=2;(${values[0]}/$total_stack_traces)*100" | bc -l)
+                print_cpu_report_stack_sample_values "${values[0]}" "$percentage" "${values[1]}" "${values[2]}"
             done <<< "$(echo -ne "${stack_traces[$nid]}" | sort | uniq -c | sort -nr | head -n $number_of_stack_trace_samples)"
             if [[ $count -gt 0 ]]; then
                 # Print new lines to separate next thread
