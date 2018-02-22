@@ -27,7 +27,7 @@ number_of_lines=3
 function help {
     echo ""
     echo "Usage: "
-    echo "top-threads -p <pid> [-n <number_of_threads>] [-s] [-o <output_directory>] [-t] [-l <number_of_lines>] [-h]"
+    echo "top-threads -p <pid> [-n <number_of_threads>] [-x] [-o <output_directory>] [-t] [-l <number_of_lines>] [-h]"
     echo ""
     echo "-p: The Java Process ID"
     echo "-n: Number of top threads to display. Default: $number_of_threads."

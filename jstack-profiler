@@ -26,7 +26,7 @@ save_ps_output=true
 function help {
     echo ""
     echo "Usage: "
-    echo "jstack-profiler -p <pid> [-n <number_of_samples>] [-i <sample_interval[suffix]>] [-o <output_directory>] [-x]"
+    echo "jstack-profiler -p <pid> [-n <number_of_samples>] [-i <sample_interval[suffix]>] [-o <output_directory>] [-x] [-h]"
     echo ""
     echo "-p: The Java Process ID"
     echo "-n: Number of samples to take. Default: $number_of_samples"
