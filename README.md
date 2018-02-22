@@ -11,6 +11,8 @@ Following are the tools available
 * [jstack-profiler](#jstack-profiler)
 * [analyze-jstack-samples](#analyze-jstack-samples)
 
+Please see the [Wiki pages](https://github.com/chrishantha/java-troubleshooting-tools/wiki) for more details about these tools.
+
 ## top-threads
 
 Show top CPU consuming threads in a Java process.
