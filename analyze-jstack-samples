@@ -116,13 +116,13 @@ function print_stack_report_values() {
 }
 
 function print_stack_report_stack_sample_header() {
-    printf "%8s  %-10s  %s\n" "Samples" "Percentage" "Stack Trace"
+    printf "%8s  %10s  %s\n" "Samples" "Percentage" "Stack Trace"
 }
 
 function print_stack_report_stack_sample_values() {
     declare -a stack_lines=()
     while IFS= read -r line; do stack_lines+=("$line"); done < <(echo "$3" | fold -w $stack_trace_column_width)
-    printf "%8s  %-10s  %s\n" "$1" $(printf "%0.2f%%" "$2") "${stack_lines[0]}"
+    printf "%8s  %10s  %s\n" "$1" $(printf "%0.2f%%" "$2") "${stack_lines[0]}"
     count=1
     while [[ $count -lt ${#stack_lines[@]} ]]; do
         printf "%20s  %s\n" "" "${stack_lines[count]}"
@@ -193,7 +193,7 @@ function analyze() {
                     average_cpu_usage="${cpu_usage_summary[$nid]}"
                     if [[ ! -z $average_cpu_usage ]]; then
                         # Use bc to calculate average of CPU usages, which are floating point numbers
-                        cpu_usage_summary[$nid]=$(echo "scale=2;($average_cpu_usage+$cpu_usage)/2" | bc -l)
+                        cpu_usage_summary[$nid]=$(echo "scale=10;($average_cpu_usage+$cpu_usage)/2" | bc -l)
                     else
                         # Save cpu usage
                         cpu_usage_summary[$nid]="$cpu_usage"
@@ -282,7 +282,7 @@ function analyze() {
                 let count+=1
                 # Replace first 2 spaces with | in the line and convert to an array with 3 elements to be used with print function
                 IFS='|' read -r -a values <<< $(echo "$line" | sed -nE 's/^[[:space:]]*([[:digit:]]+)[[:space:]]+([[:upper:]_]+)[[:space:]]+(.*)$/\1|\2|\3/p')
-                percentage=$(echo "scale=2;(${values[0]}/$total_stack_traces)*100" | bc -l)
+                percentage=$(echo "scale=10;(${values[0]}/$total_stack_traces)*100" | bc -l)
                 print_cpu_report_stack_sample_values "${values[0]}" "$percentage" "${values[1]}" "${values[2]}"
             done <<< "$(echo -ne "${stack_traces[$nid]}" | sort | uniq -c | sort -nr | head -n $number_of_stack_trace_samples)"
             if [[ $count -gt 0 ]]; then
@@ -316,22 +316,27 @@ function analyze() {
                     current_thread_state=$thread_state
                     continue
                 fi
-                # Get the stack trace line
-                local stack_line=$(echo "$line" | sed -nE 's/at[[:space:]]+(.*)/\1/p')
-                if [[ ! -z "$stack_line" ]]; then
-                    let count+=1
-                    if [[ $count -gt $number_of_stack_trace_lines ]]; then
-                        #Ignore extra stack trace lines
+                if [[ $show_stack_trace_samples = true ]]; then
+                    # Get the stack trace line
+                    local stack_line=$(echo "$line" | sed -nE 's/at[[:space:]]+(.*)/\1/p')
+                    if [[ ! -z "$stack_line" ]]; then
+                        let count+=1
+                        if [[ $count -gt $number_of_stack_trace_lines ]]; then
+                            #Ignore extra stack trace lines
+                            continue
+                        fi
+                        if [[ $count -gt 1 ]]; then
+                            stack_trace+=';'$stack_line
+                        else
+                            stack_trace+=$stack_line
+                        fi
                         continue
                     fi
-                    if [[ $count -gt 1 ]]; then
-                        stack_trace+=';'$stack_line
-                    else
-                        stack_trace+=$stack_line
-                    fi
-                    continue
+                elif [[ "$line" =~ ^at.*$ ]]; then
+                    # Set a value to stack_trace to count the samples
+                    stack_trace="X"
                 fi
-                local deadlocks=$(echo "$line" | sed -nE 's/Found[[:space:]]+([[:digit:]]+)[[:space:]]+deadlock.*/\1/p')
+                local deadlocks=$(echo "$line" | sed -nE 's/Found[[:space:]]+[[:digit:]]+[[:space:]]+deadlock.*/\0/p')
                 if [[ ! -z $deadlocks ]]; then
                     thread_dumps_with_deadlock+=("$filename")
                     continue
@@ -339,12 +344,14 @@ function analyze() {
                 # Save stack trace when the line is blank
                 if [[ -z $line ]]; then
                     if [[ ! -z $stack_trace && ! -z $current_thread_state ]]; then
-                        stack_traces="${stack_traces_by_state[$current_thread_state]}"
-                        if [[ ! -z $stack_traces ]]; then
-                            stack_traces+="\n"
+                        if [[ $show_stack_trace_samples = true ]]; then
+                            stack_traces="${stack_traces_by_state[$current_thread_state]}"
+                            if [[ ! -z $stack_traces ]]; then
+                                stack_traces+="\n"
+                            fi
+                            stack_traces+=$stack_trace
+                            stack_traces_by_state[$current_thread_state]=$stack_traces
                         fi
-                        stack_traces+=$stack_trace
-                        stack_traces_by_state[$current_thread_state]=$stack_traces
                         let stack_traces_count_by_state[$current_thread_state]+=1
                         let total_count+=1
                     fi
@@ -369,7 +376,7 @@ function analyze() {
                 continue
             fi
             #Calculate stack traces sample percentage
-            percentage=$(echo "scale=2;($stack_traces_count/$total_count)*100" | bc -l)
+            percentage=$(echo "scale=10;($stack_traces_count/$total_count)*100" | bc -l)
 
             # Print main report
             print_stack_report_header
@@ -395,7 +402,7 @@ function analyze() {
                 let count+=1
                 # Replace first space with | in the line and convert to an array with 2 elements to be used with print function
                 IFS='|' read -r -a values <<< $(echo "$line" | sed -nE 's/^[[:space:]]*([[:digit:]]+)[[:space:]]+(.*)$/\1|\2/p')
-                percentage=$(echo "scale=2;(${values[0]}/$stack_traces_count)*100" | bc -l)
+                percentage=$(echo "scale=10;(${values[0]}/$stack_traces_count)*100" | bc -l)
                 print_stack_report_stack_sample_values "${values[0]}" "$percentage" "${values[1]}"
             done <<< "$(echo -ne "${stack_traces}" | sort | uniq -c | sort -nr | head -n $number_of_stack_trace_samples)"
             if [[ $count -gt 0 ]]; then
@@ -404,7 +411,9 @@ function analyze() {
             fi
         done
 
-        echo "WARN: Found deadlock(s) in ${#thread_dumps_with_deadlock[@]} thread dump(s). Refer thread dump: $PWD/${thread_dumps_with_deadlock[-1]}"
+        if [[ ${#thread_dumps_with_deadlock[@]} -gt 0 ]]; then
+            echo "WARN: Found deadlock(s) in ${#thread_dumps_with_deadlock[@]} thread dump(s). Refer thread dump: $PWD/${thread_dumps_with_deadlock[-1]}"
+        fi
     fi
 }
 
