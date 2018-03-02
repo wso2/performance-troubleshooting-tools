@@ -1,4 +1,4 @@
-# Java Troubleshooting Tools
+# Performance Troubleshooting Tools
 This repository contains some tools to troubleshoot Java related performance issues.
 
 The tools are basically shell scripts (compatible with Bash 4.x).
@@ -11,7 +11,7 @@ Following are the tools available
 * [jstack-profiler](#jstack-profiler)
 * [analyze-jstack-samples](#analyze-jstack-samples)
 
-Please see the [Wiki pages](https://github.com/chrishantha/java-troubleshooting-tools/wiki) for more details about these tools.
+Please see the [Wiki pages](https://github.com/wso2/performance-troubleshooting-tools/wiki) for more details about these tools.
 
 ## top-threads
 
