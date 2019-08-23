@@ -1,34 +1,36 @@
 #!/bin/bash
-# Copyright 2018 M. Isuru Tharanga Chrishantha Perera
+# Copyright (c) 2018, WSO2 Inc. (http://wso2.org) All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
+# WSO2 Inc. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 #
 # ----------------------------------------------------------------------------
 # Profile Java Applications using jstack command
 # ----------------------------------------------------------------------------
 
-pid=""
-number_of_samples=150
+pid=$(pgrep -o java || echo "")
+number_of_samples=30
 sample_interval=2s
 output_directory=""
 save_ps_output=true
 
-function help {
+function help() {
     echo ""
     echo "Usage: "
-    echo "jstack-profiler -p <pid> [-n <number_of_samples>] [-i <sample_interval[suffix]>] [-o <output_directory>] [-x] [-h]"
+    echo "jstack-profiler [-p <pid>] [-n <number_of_samples>] [-i <sample_interval[suffix]>] [-o <output_directory>] [-x] [-h]"
     echo ""
-    echo "-p: The Java Process ID"
+    echo "-p: The Java Process ID. Default: Oldest Java Application"
     echo "-n: Number of samples to take. Default: $number_of_samples"
     echo "-i: Sample interval. Default: $sample_interval. Floating point numbers are accepted"
     echo "    Suffix may be: "
@@ -42,9 +44,8 @@ function help {
     echo ""
 }
 
-while getopts "hp:n:i:o:" opts
-do
-  case $opts in
+while getopts "hp:n:i:o:" opts; do
+    case $opts in
     h)
         help
         exit 0
@@ -68,7 +69,7 @@ do
         help
         exit 1
         ;;
-  esac
+    esac
 done
 
 if [[ -z $pid ]]; then
@@ -76,7 +77,7 @@ if [[ -z $pid ]]; then
     exit 1
 fi
 
-if ! kill -0 $pid > /dev/null 2>&1; then
+if ! kill -0 $pid >/dev/null 2>&1; then
     echo "Please make sure the process exists" >&2
     exit 1
 fi
@@ -88,24 +89,27 @@ elif [[ ! -d $output_directory ]]; then
     mkdir $output_directory
 fi
 
-echo "The jstack samples will be saved in $output_directory"
+echo "Profiling the process with PID: $pid. The jstack samples will be saved in $output_directory"
 counter=0
 while [[ $counter -lt $number_of_samples ]]; do
     prefix=$(date +%s%3N)
     ps_output_file=$output_directory/$prefix-ps.txt
     thread_dump_file=$output_directory/$prefix-thread-dump.txt
-    if [[ $save_ps_output = true ]]; then
+    if [[ $save_ps_output == true ]]; then
         # Make sure following command is the same 'ps' command used in 'top-threads' script
-        ps -p $pid -T -o "%cpu=,%mem=,state=,nice=,cputime=,lwp=,pid=" | sort -nr | \
-            sed -E -e 's/^[[:space:]]*//' -e 's/[[:space:]]+/,/g' > $ps_output_file
+        if ! ps -p $pid -T -o "%cpu=,%mem=,state=,nice=,cputime=,lwp=,pid=" | sort -nr |
+            sed -E -e 's/^[[:space:]]*//' -e 's/[[:space:]]+/,/g' >$ps_output_file; then
+            echo "An error was encountered when getting the 'ps' report of process $pid."
+            break
+        fi
     fi
     # Get thread dump
-    if ! jstack ${JSTACK_OPTS} $pid > $thread_dump_file; then
+    if ! jstack ${JSTACK_OPTS} $pid >$thread_dump_file; then
         echo "An error was encountered when getting a thread dump of process $pid."
         break
     fi
     let counter+=1
-    let progress=$counter*100/$number_of_samples*100/100;
+    let progress=$counter*100/$number_of_samples*100/100
     echo -ne "\rProgress: $progress%"
     if [[ $counter -lt $number_of_samples ]]; then
         sleep $sample_interval
