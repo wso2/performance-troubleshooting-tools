@@ -1,47 +1,48 @@
 #!/bin/bash
-# Copyright 2018 M. Isuru Tharanga Chrishantha Perera
+# Copyright (c) 2018, WSO2 Inc. (http://wso2.org) All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
+# WSO2 Inc. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 #
 # ----------------------------------------------------------------------------
 # See top CPU consuming Java threads
 # ----------------------------------------------------------------------------
 
-pid=""
+pid=$(pgrep -o java || echo "")
 number_of_threads=10
 save_output=true
 output_directory=""
 print_stack_traces=false
 number_of_lines=3
 
-function help {
+function help() {
     echo ""
     echo "Usage: "
-    echo "top-threads -p <pid> [-n <number_of_threads>] [-x] [-o <output_directory>] [-t] [-l <number_of_lines>] [-h]"
+    echo "top-threads [-p <pid>] [-n <number_of_threads>] [-x] [-o <output_directory>] [-t] [-l <number_of_lines>] [-h]"
     echo ""
-    echo "-p: The Java Process ID"
+    echo "-p: The Java Process ID. Default: Oldest Java Application"
     echo "-n: Number of top threads to display. Default: $number_of_threads."
     echo "-x: Do not save thread dump and PS output"
-    echo "-o: Output directory to save results. Works with -s option. A temp directory is used by default."
+    echo "-o: Output directory to save results. A temp directory is used by default."
     echo "-t: Print stack traces."
     echo "-l: Number of lines to print in stack traces. Works with -t option. Default: $number_of_lines."
     echo "-h: Display this help."
     echo ""
 }
 
-while getopts "hn:p:xo:tl:" opts
-do
-  case $opts in
+while getopts "hn:p:xo:tl:" opts; do
+    case $opts in
     h)
         help
         exit 0
@@ -68,7 +69,7 @@ do
         help
         exit 1
         ;;
-  esac
+    esac
 done
 
 if [[ -z $pid ]]; then
@@ -76,7 +77,7 @@ if [[ -z $pid ]]; then
     exit 1
 fi
 
-if ! kill -0 $pid > /dev/null 2>&1; then
+if ! kill -0 $pid >/dev/null 2>&1; then
     echo "Please make sure the process exists" >&2
     exit 1
 fi
@@ -94,7 +95,7 @@ function process_line() {
     # Read comma separated values to an array
     IFS=, read -a ps_values <<<"$1"
     tid=${ps_values[5]}
-    if [[ $pid = $tid ]]; then
+    if [[ $pid == $tid ]]; then
         return 0
     fi
     # Convert TID to hexadecimal
@@ -111,15 +112,15 @@ function process_line() {
     # Print values
     print_line "${thread_details[0]}" "${ps_values[0]}" "${ps_values[1]}" "$thread_status" \
         "${ps_values[2]}" "${ps_values[3]}" "${ps_values[4]}" "${ps_values[5]}" "${thread_details[1]}"
-    if [[ $print_stack_traces = true ]]; then
+    if [[ $print_stack_traces == true ]]; then
         max_index=${#thread_dump_lines[@]}
         # Stack trace starts from 3rd line, but show first two lines as well
         line_index=0
         # Use let for arithmetic expressions
         let limit=$number_of_lines+2
         while [[ $line_index -lt $limit && $line_index -lt $max_index ]]; do
-            line="${thread_dump_lines[$line_index]}" 
-            if [[ -z "${line// }" ]]; then
+            line="${thread_dump_lines[$line_index]}"
+            if [[ -z "${line// /}" ]]; then
                 break
             else
                 echo "$line"
@@ -133,15 +134,15 @@ function process_line() {
 #Get ps output first
 #Sort manually. ps --sort works only on processes, not on threads.
 #Get only specified number of threads and replace spaces with comma
-ps_output=$(ps -p $pid -T -o "%cpu=,%mem=,state=,nice=,cputime=,lwp=,pid=" | sort -nr | \
+ps_output=$(ps -p $pid -T -o "%cpu=,%mem=,state=,nice=,cputime=,lwp=,pid=" | sort -nr |
     head -$number_of_threads | sed -E -e 's/^[[:space:]]*//' -e 's/[[:space:]]+/,/g')
 
 #Get thread dump
 jstack_output=$(jstack $pid)
 
 top_threads_output=$(
-print_header
-echo "$ps_output" | while read line; do process_line "$line"; done
+    print_header
+    echo "$ps_output" | while read line; do process_line "$line"; done
 )
 
 #Print top threads
@@ -151,7 +152,7 @@ function print_save_message() {
     printf "%-18s %-50s\n" "$1 saved:" "$2"
 }
 
-if [[ $save_output = true ]]; then
+if [[ $save_output == true ]]; then
     prefix=$(date +%s%3N)
     if [[ -z $output_directory ]]; then
         # Use temp directory
@@ -162,10 +163,10 @@ if [[ $save_output = true ]]; then
     ps_output_file=$output_directory/$prefix-ps.txt
     thread_dump_file=$output_directory/$prefix-thread-dump.txt
     top_threads_output_file=$output_directory/$prefix-top-threads.txt
-    echo "$ps_output" > $ps_output_file
+    echo "$ps_output" >$ps_output_file
     print_save_message "PS output" $ps_output_file
-    echo "$jstack_output" > $thread_dump_file
+    echo "$jstack_output" >$thread_dump_file
     print_save_message "Thread dump" $thread_dump_file
-    echo "$top_threads_output" > $top_threads_output_file
+    echo "$top_threads_output" >$top_threads_output_file
     print_save_message "Top threads" $top_threads_output_file
 fi

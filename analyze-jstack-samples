@@ -1,17 +1,19 @@
-#!/bin/bash
-# Copyright 2018 M. Isuru Tharanga Chrishantha Perera
+#!/bin/bash -e
+# Copyright (c) 2018, WSO2 Inc. (http://wso2.org) All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
+# WSO2 Inc. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 #
 # ----------------------------------------------------------------------------
 # Analyze jstack samples taken from jstack-profiler script
@@ -19,19 +21,22 @@
 # This script by default shows the stack samples count by thread state
 # There is an option to show CPU Usage per thread
 
+# All Java Thread States. https://docs.oracle.com/javase/8/docs/api/
+THREAD_STATES=("NEW" "RUNNABLE" "BLOCKED" "WAITING" "TIMED_WAITING" "TERMINATED")
+
 samples_directory=""
 number_of_stack_trace_samples=5
-number_of_stack_trace_lines=20
+number_of_stack_trace_lines=100
 show_stack_trace_samples=false
-stack_trace_column_width=80
+stack_trace_column_width=100
 show_cpu_usage_report=false
-number_of_threads=10
+number_of_threads=100
 
-function help {
+function help() {
     echo ""
     echo "Usage: "
     echo "analyze-jstack-samples -d <samples_directory> [-s <number_of_stack_trace_samples>] [-l <number_of_stack_trace_lines>]" \
-         "[-t] [-w <stack_trace_column_width>] [[-u] [-n <number_of_threads>]] [-h]"
+        "[-t] [-w <stack_trace_column_width>] [[-u] [-n <number_of_threads>]] [-h]"
     echo ""
     echo "-d: The directory containing jstack samples"
     echo "-s: Number of stack trace samples to show. Default: $number_of_stack_trace_samples"
@@ -39,14 +44,13 @@ function help {
     echo "-t: Show stack trace samples."
     echo "-w: Width of stack trace column. Default $stack_trace_column_width"
     echo "-u: Show CPU usage report instead of stack sample count"
-    echo "-n: Number of top threads to display. Default: $number_of_threads. Works with -u option"
+    echo "-n: Number of top threads to read from each 'ps' command output. Default: $number_of_threads. Works with -u option"
     echo "-h: Display this help"
     echo ""
 }
 
-while getopts "hd:s:l:utw:" opts
-do
-  case $opts in
+while getopts "hd:s:l:utw:" opts; do
+    case $opts in
     h)
         help
         exit 0
@@ -73,7 +77,7 @@ do
         help
         exit 1
         ;;
-  esac
+    esac
 done
 
 if [[ ! -d $samples_directory ]]; then
@@ -89,20 +93,20 @@ function print_cpu_report_header() {
 }
 
 function print_cpu_report_values() {
-    printf "%8s  %s\n" $(printf "%0.2f" "$1") "$2"
+    printf "%8s  %s\n" "$(printf "%0.2f" "$1")" "$2"
 }
 
 function print_cpu_report_stack_sample_header() {
-    printf "%8s  %10s  %-10s  %s\n" "Samples" "Percentage" "State" "Stack Trace"
+    printf "%8s  %10s  %-14s  %s\n" "Samples" "Percentage" "State" "Stack Trace"
 }
 
 function print_cpu_report_stack_sample_values() {
     declare -a stack_lines=()
     while IFS= read -r line; do stack_lines+=("$line"); done < <(echo "$4" | fold -w $stack_trace_column_width)
-    printf "%8s  %10s  %-10s  %s\n" "$1" $(printf "%0.2f%%" "$2") "$3" "${stack_lines[0]}"
+    printf "%8s  %10s  %-14s  %s\n" "$1" "$(printf "%0.2f%%" "$2")" "$3" "${stack_lines[0]}"
     count=1
     while [[ $count -lt ${#stack_lines[@]} ]]; do
-        printf "%32s  %s\n" "" "${stack_lines[count]}"
+        printf "%36s  %s\n" "" "${stack_lines[count]}"
         let count+=1
     done
 }
@@ -112,7 +116,7 @@ function print_stack_report_header() {
 }
 
 function print_stack_report_values() {
-    printf "%-14s  %8s  %10s\n" "$1" $(printf "%d" "$2") $(printf "%0.2f%%" "$3") 
+    printf "%-14s  %8s  %10s\n" "$1" "$(printf "%d" "$2")" "$(printf "%0.2f%%" "$3")"
 }
 
 function print_stack_report_stack_sample_header() {
@@ -122,7 +126,7 @@ function print_stack_report_stack_sample_header() {
 function print_stack_report_stack_sample_values() {
     declare -a stack_lines=()
     while IFS= read -r line; do stack_lines+=("$line"); done < <(echo "$3" | fold -w $stack_trace_column_width)
-    printf "%8s  %10s  %s\n" "$1" $(printf "%0.2f%%" "$2") "${stack_lines[0]}"
+    printf "%8s  %10s  %s\n" "$1" "$(printf "%0.2f%%" "$2")" "${stack_lines[0]}"
     count=1
     while [[ $count -lt ${#stack_lines[@]} ]]; do
         printf "%20s  %s\n" "" "${stack_lines[count]}"
@@ -135,142 +139,149 @@ sp="/-\|"
 sc=0
 
 spin() {
-   printf "\rAnalyzing ${sp:sc++:1}" >&2
-   ((sc==${#sp})) && sc=0
+    printf "\rAnalyzing ${sp:sc++:1}" >&2
+    if [[ $sc -eq ${#sp} ]]; then
+        sc=0
+    fi
 }
 
 endspin() {
-   printf "\rAnalysis completed.\n" >&2
+    printf "\rAnalysis completed.\n" >&2
 }
 
+# This is the main function to analyze thread stack samples
+# There are mainly two reports.
+# 1. CPU Usage report, which combines stack samples with ps output data. This shows CPU usage per thread.
+# 2. Stack Samples report, which display sample counts based on thread status.
+# Each of these reports support an option to show stack traces.
 function analyze() {
-    if [[ $show_cpu_usage_report = true ]]; then
-        #CPU usage by NID
+    counter=0
+    if [[ $show_cpu_usage_report == true ]]; then
+        #CPU usage by TID
         declare -A cpu_usage_summary
-        #Thread name by NID
-        declare -A thread_names
-        #Stack Traces by NID
-        declare -A stack_traces
         # Go through all ps output files
         for filename in *-ps.txt; do
             #Start spinning
             spin
-            # Corresponding thread dump file of ps output file
-            thread_dump_file=$(echo $filename | sed 's/ps/thread-dump/')
+            counter=0
             # Read the ps output file
             while read line; do
-                # Read csv to an array
+                let counter=$counter+1
+                if [[ $counter -gt $number_of_threads ]]; then
+                    break
+                fi
+                # Read csv into an array
                 IFS=, read -a ps_values <<<"$line"
                 # First column is the CPU usage
                 cpu_usage="${ps_values[0]}"
                 # Sixth column is the Thread ID (LWP)
+                if [[ $cpu_usage == "0.0" ]]; then
+                    # ps output is already sorted in descending order
+                    break
+                fi
                 tid="${ps_values[5]}"
-                # Convert TID to hexadecimal
-                nid=$(printf '%x' $tid)
-                # Find the thread name by nid
-                thread_name="${thread_names[$nid]}"
-                declare -a thread_dump_lines=()
-                # To show stack trace samples, each thread dump file should be processed.
-                # Otherwise, a single thread dump should be enough to get the thread name,
-                # assuming thread names won't change
-                if [[ -z "$thread_name" || $show_stack_trace_samples = true ]]; then
+                # Get previously saved cpu usage
+                local average_cpu_usage="${cpu_usage_summary[$tid]:-""}"
+                if [[ -n $average_cpu_usage ]]; then
+                    # Use bc to calculate average of CPU usages, which are floating point numbers
+                    cpu_usage_summary[$tid]=$(bc -l <<<"scale=10;($average_cpu_usage+$cpu_usage)/2")
+                else
+                    # Save cpu usage
+                    cpu_usage_summary[$tid]=$cpu_usage
+                fi
+            done <"$filename"
+        done
+
+        # Sort thread ids by cpu usage in descending order
+        sorted_tids=($(
+            for tid in "${!cpu_usage_summary[@]}"; do
+                printf '%s:%0.2f\n' "$tid" "${cpu_usage_summary[$tid]}"
+            done | sort -r -t : -k 2rn | sed 's/:.*//'
+        ))
+
+        #Thread name by TID
+        declare -A thread_names
+
+        for tid in "${sorted_tids[@]:0:$number_of_threads}"; do
+            spin
+            # Convert TID to hexadecimal and get NID
+            local nid="$(printf '%x' $tid)"
+            # To show stack trace samples, each thread dump file should be processed.
+            # Otherwise, a single thread dump should be enough to get the thread name,
+            # assuming thread names won't change
+            local thread_details_line
+            if [[ $show_stack_trace_samples == true ]]; then
+                # Save stacks of each thread in a file
+                local stack_trace_file="${tid}.stacks"
+                # Create stack_trace_file
+                >$stack_trace_file
+                # Go through all thread dump files
+                for filename in *-thread-dump.txt; do
+                    #Start spinning
+                    spin
+                    local thread_state=""
+                    line_index=0
+                    skip_line=false
+                    stack_trace_complete=false
                     # Read multiple lines after grep match and store lines in an array
                     let thread_dump_line_count=$number_of_stack_trace_lines+3
                     while IFS= read -r thread_dump_line; do
-                        thread_dump_lines+=("$thread_dump_line")
-                    done < <(grep -A $thread_dump_line_count nid=0x$nid $thread_dump_file)
-                    # Extract thread name from the first line
-                    local thread_details_line="${thread_dump_lines[0]}"
-                    if [[ ! -z "$thread_details_line" ]]; then
-                        thread_name=$(echo "$thread_details_line" | sed -E 's/"(.+)".*/"\1"/')
-                    fi
-                fi
-                # Continue if the thread name already found in cache or in the thread dump
-                if [[ ! -z "$thread_name" ]]; then
-                    # Save thread name
-                    thread_names[$nid]="$thread_name"
-                    # Get previously saved cpu usage
-                    average_cpu_usage="${cpu_usage_summary[$nid]}"
-                    if [[ ! -z $average_cpu_usage ]]; then
-                        # Use bc to calculate average of CPU usages, which are floating point numbers
-                        cpu_usage_summary[$nid]=$(echo "scale=10;($average_cpu_usage+$cpu_usage)/2" | bc -l)
-                    else
-                        # Save cpu usage
-                        cpu_usage_summary[$nid]="$cpu_usage"
-                    fi
-
-                    if [[ $show_stack_trace_samples = false ]]; then
-                        # continue if there is no need to show the stack trace samples
-                        continue
-                    fi
-
-                    # Extract thread state from the second line
-                    thread_state=$(echo "${thread_dump_lines[1]}" | sed -E 's/.*java.lang.Thread.State:[[:space:]]+([[:upper:]_]+).*/\1/')
-                    if [[ -z "$thread_state" ]]; then
-                        # Do not continue without the thread state
-                        continue
-                    fi
-
-                    # Get previously saved stack trace line
-                    stack_trace="${stack_traces[$nid]}"
-                    if [[ ! -z $stack_trace ]]; then
-                        # Append new line if there is a previous stack trace line
-                        stack_trace+="\n"
-                    fi
-
-                    # Thread state should in the beginning of the line
-                    stack_trace+="$thread_state"
-
-                    max_index=${#thread_dump_lines[@]}
-                    # Start from the third line in thread dump lines
-                    line_index=2
-                    let limit=$number_of_stack_trace_lines+2
-                    count=0
-                    while [[ $line_index -lt $limit && $line_index -lt $max_index ]]; do
-                        thread_dump_line="${thread_dump_lines[$line_index]}"
-                        if [[ -z "${thread_dump_line// }" ]]; then
-                            # Do not continue if the line is empty
+                        let line_index=line_index+1
+                        if [[ $line_index -eq 1 ]]; then
+                            thread_details_line="${thread_dump_line}"
+                            continue
+                        elif [[ $line_index -eq 2 ]]; then
+                            thread_state="${thread_dump_line##*State: }"
+                            thread_state="${thread_state%% *}"
+                            if [[ -s $stack_trace_file ]]; then
+                                echo -ne "\n" >>$stack_trace_file
+                            fi
+                            echo -ne "$thread_state|" >>$stack_trace_file
+                            continue
+                        elif [[ -n "$thread_dump_line" ]]; then
+                            local stack_line="${thread_dump_line##*at }"
+                            if [[ $line_index -eq 3 ]]; then
+                                echo -ne "${stack_line}" >>$stack_trace_file
+                            else
+                                echo -ne ";${stack_line}" >>$stack_trace_file
+                            fi
+                            continue
+                        fi
+                        if [[ -z "$thread_dump_line" ]]; then
                             break
                         fi
-                        local stack_line=$(echo "$thread_dump_line" | sed -nE 's/.*at[[:space:]]+(.*)/\1/p')
-                        if [[ ! -z "$stack_line" ]]; then
-                            let count+=1
-                            if [[ $count -gt 1 ]]; then
-                                stack_trace+=';'$stack_line
-                            else
-                                stack_trace+=' '$stack_line
-                            fi
-                        fi
-                        let line_index=line_index+1
-                    done
-                    if [[ $count -gt 0 && ! -z "$stack_trace" ]]; then
-                        stack_traces[$nid]="$stack_trace"
-                    fi
-                fi
-            done < "$filename"
+                    done < <(grep -m 1 -A $thread_dump_line_count nid=0x$nid $filename)
+                done
+                # Add new line at the end of file
+                echo -ne "\n" >>$stack_trace_file
+            else
+                thread_details_line="$(grep -m 1 -h nid=0x$nid *thread-dump.txt | head -1)"
+            fi
+            if [[ -n "$thread_details_line" ]]; then
+                local thread_name="${thread_details_line%%\" *}"
+                thread_name="${thread_name#\"}"
+                # Save thread name
+                thread_names[$tid]=$thread_name
+            fi
         done
 
         #end spin
         endspin
 
-        # Sort native thread ids by cpu usage in descending order
-        sorted_nids=($(
-            for nid in "${!cpu_usage_summary[@]}"; do
-              printf '%s:%0.2f\n' "$nid" "${cpu_usage_summary[$nid]}"
-            done | sort -r -t : -k 2rn | sed 's/:.*//'))
-
         # Print header only once if stack trace samples are not shown
-        [[ $show_stack_trace_samples = false ]] && print_cpu_report_header
+        [[ $show_stack_trace_samples == false ]] && print_cpu_report_header
 
-        for nid in "${sorted_nids[@]:0:$number_of_threads}"; do
+        for tid in "${sorted_tids[@]:0:$number_of_threads}"; do
             # Repeat header with stack trace samples
-            [[ $show_stack_trace_samples = true ]] && print_cpu_report_header
-            print_cpu_report_values "${cpu_usage_summary[$nid]}" "${thread_names[$nid]}"
-            if [[ $show_stack_trace_samples = false ]]; then
+            [[ $show_stack_trace_samples == true ]] && print_cpu_report_header
+            print_cpu_report_values "${cpu_usage_summary[$tid]}" "${thread_names[$tid]}"
+            if [[ $show_stack_trace_samples == false ]]; then
                 continue
             fi
             count=0
-            total_stack_traces=$(echo -ne "${stack_traces[$nid]}" | wc -l)
+            local stack_trace_file="${tid}.stacks"
+            local total_stack_traces="$(wc -l $stack_trace_file)"
+            total_stack_traces=${total_stack_traces%% *}
             while read line; do
                 if [[ -z "$line" ]]; then
                     continue
@@ -280,11 +291,10 @@ function analyze() {
                     print_cpu_report_stack_sample_header
                 fi
                 let count+=1
-                # Replace first 2 spaces with | in the line and convert to an array with 3 elements to be used with print function
-                IFS='|' read -r -a values <<< $(echo "$line" | sed -nE 's/^[[:space:]]*([[:digit:]]+)[[:space:]]+([[:upper:]_]+)[[:space:]]+(.*)$/\1|\2|\3/p')
-                percentage=$(echo "scale=10;(${values[0]}/$total_stack_traces)*100" | bc -l)
+                IFS='|' read -r -a values <<<"${line/ /|}"
+                percentage=$(bc -l <<<"scale=10;(${values[0]}/$total_stack_traces)*100")
                 print_cpu_report_stack_sample_values "${values[0]}" "$percentage" "${values[1]}" "${values[2]}"
-            done <<< "$(echo -ne "${stack_traces[$nid]}" | sort | uniq -c | sort -nr | head -n $number_of_stack_trace_samples)"
+            done < <(sort $stack_trace_file | uniq -c | sort -nr | head -n $number_of_stack_trace_samples)
             if [[ $count -gt 0 ]]; then
                 # Print new lines to separate next thread
                 echo -ne "\n\n"
@@ -301,56 +311,62 @@ function analyze() {
         declare -a thread_dumps_with_deadlock
 
         # Temp variables in the loop
-        local current_thread_state
-        local stack_trace
+        local current_thread_state=""
+        local stack_trace=""
         local count=0
+
+        #Initialize files
+        if [[ $show_stack_trace_samples == true ]]; then
+            for thread_state in "${THREAD_STATES[@]}"; do
+                local stack_trace_file="${thread_state}.stacks"
+                >$stack_trace_file
+            done
+        fi
 
         for filename in *-thread-dump.txt; do
             #Start spinning
             spin
             # Read the thread dump file
             while read line; do
-                # Look for thread state first
-                local thread_state=$(echo "$line" | sed -nE 's/.*java.lang.Thread.State:[[:space:]]+([[:upper:]_]+).*/\1/p')
-                if [[ ! -z "$thread_state" ]]; then
-                    current_thread_state=$thread_state
-                    continue
-                fi
-                if [[ $show_stack_trace_samples = true ]]; then
-                    # Get the stack trace line
-                    local stack_line=$(echo "$line" | sed -nE 's/at[[:space:]]+(.*)/\1/p')
-                    if [[ ! -z "$stack_line" ]]; then
-                        let count+=1
-                        if [[ $count -gt $number_of_stack_trace_lines ]]; then
-                            #Ignore extra stack trace lines
+                if [[ -z "$current_thread_state" ]]; then
+                    if [[ "$line" == java.lang.Thread.State* ]]; then
+                        local thread_state="${line##*State: }"
+                        thread_state="${thread_state%% *}"
+                        if [[ ! -z "$thread_state" ]]; then
+                            current_thread_state=$thread_state
                             continue
                         fi
-                        if [[ $count -gt 1 ]]; then
-                            stack_trace+=';'$stack_line
-                        else
-                            stack_trace+=$stack_line
-                        fi
+                    fi
+                fi
+                if [[ "$line" == at* ]]; then
+                    let count+=1
+                    if [[ $count -gt $number_of_stack_trace_lines ]]; then
+                        #Ignore extra stack trace lines
                         continue
                     fi
-                elif [[ "$line" =~ ^at.*$ ]]; then
-                    # Set a value to stack_trace to count the samples
-                    stack_trace="X"
+                    if [[ $show_stack_trace_samples == true ]]; then
+                        local stack_line="${line##*at }"
+                        if [[ $count -gt 1 ]]; then
+                            stack_trace+=';'
+                        fi
+                        stack_trace+=$stack_line
+                    else
+                        # Set a value to stack_trace to count the samples
+                        stack_trace="X"
+                    fi
+                    continue
                 fi
-                local deadlocks=$(echo "$line" | sed -nE 's/Found[[:space:]]+[[:digit:]]+[[:space:]]+deadlock.*/\0/p')
-                if [[ ! -z $deadlocks ]]; then
+                if [[ "$line" == Found*deadlock* ]]; then
                     thread_dumps_with_deadlock+=("$filename")
                     continue
                 fi
                 # Save stack trace when the line is blank
-                if [[ -z $line ]]; then
+                if [[ -z "$line" ]]; then
+                    spin
                     if [[ ! -z $stack_trace && ! -z $current_thread_state ]]; then
-                        if [[ $show_stack_trace_samples = true ]]; then
-                            stack_traces="${stack_traces_by_state[$current_thread_state]}"
-                            if [[ ! -z $stack_traces ]]; then
-                                stack_traces+="\n"
-                            fi
-                            stack_traces+=$stack_trace
-                            stack_traces_by_state[$current_thread_state]=$stack_traces
+                        if [[ $show_stack_trace_samples == true ]]; then
+                            local stack_trace_file="${current_thread_state}.stacks"
+                            echo "$stack_trace" >>$stack_trace_file
                         fi
                         let stack_traces_count_by_state[$current_thread_state]+=1
                         let total_count+=1
@@ -359,36 +375,34 @@ function analyze() {
                     stack_trace=""
                     count=0
                 fi
-            done < "$filename"
+            done <"$filename"
         done
 
         #end spin
         endspin
 
-        # All Java Thread States. https://docs.oracle.com/javase/8/docs/api/
-        thread_states=("NEW" "RUNNABLE" "BLOCKED" "WAITING" "TIMED_WAITING" "TERMINATED")
-
         # Stacks will always be shown in this thread state order
-        for thread_state in "${thread_states[@]}"; do
+        for thread_state in "${THREAD_STATES[@]}"; do
+            # set -x
             stack_traces_count=${stack_traces_count_by_state[$thread_state]}
             if [[ $stack_traces_count -eq 0 ]]; then
                 # Continue if there are no stack traces for the given thread state
                 continue
             fi
             #Calculate stack traces sample percentage
-            percentage=$(echo "scale=10;($stack_traces_count/$total_count)*100" | bc -l)
+            percentage="$(echo "scale=10;($stack_traces_count/$total_count)*100" | bc -l)"
 
             # Print main report
             print_stack_report_header
             print_stack_report_values "$thread_state" "$stack_traces_count" "$percentage"
 
-            if [[ $show_stack_trace_samples = false ]]; then
+            if [[ $show_stack_trace_samples == false ]]; then
                 # continue if there is no need to show the stack trace samples
                 continue
             fi
 
             # Stack traces for sub report
-            stack_traces="${stack_traces_by_state[$thread_state]}"
+            local stack_trace_file="${thread_state}.stacks"
 
             count=0
             while read line; do
@@ -400,11 +414,11 @@ function analyze() {
                     print_stack_report_stack_sample_header
                 fi
                 let count+=1
-                # Replace first space with | in the line and convert to an array with 2 elements to be used with print function
-                IFS='|' read -r -a values <<< $(echo "$line" | sed -nE 's/^[[:space:]]*([[:digit:]]+)[[:space:]]+(.*)$/\1|\2/p')
-                percentage=$(echo "scale=10;(${values[0]}/$stack_traces_count)*100" | bc -l)
+                IFS='|' read -r -a values <<<"${line/ /|}"
+                percentage="$(echo "scale=10;(${values[0]}/$stack_traces_count)*100" | bc -l)"
                 print_stack_report_stack_sample_values "${values[0]}" "$percentage" "${values[1]}"
-            done <<< "$(echo -ne "${stack_traces}" | sort | uniq -c | sort -nr | head -n $number_of_stack_trace_samples)"
+            done < <(sort $stack_trace_file | uniq -c | sort -nr | head -n $number_of_stack_trace_samples)
+
             if [[ $count -gt 0 ]]; then
                 # Print new lines to separate next thread
                 echo -ne "\n\n"
